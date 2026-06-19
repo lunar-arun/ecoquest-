@@ -2,19 +2,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
-import ssl
 import json
 import uuid
 import datetime
+import certifi
 from bson import ObjectId
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
+
 
 class JSONCollection:
     def __init__(self, db_path, collection_name):
         self.db_path = db_path
         self.collection_name = collection_name
-        
+
     def _load(self):
         if not os.path.exists(self.db_path):
             return []
@@ -24,7 +25,7 @@ class JSONCollection:
                 return data.get(self.collection_name, [])
         except Exception:
             return []
-            
+
     def _save(self, docs):
         data = {}
         if os.path.exists(self.db_path):
@@ -36,7 +37,7 @@ class JSONCollection:
         data[self.collection_name] = docs
         with open(self.db_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, default=self._json_serial, indent=2)
-            
+
     def _json_serial(self, obj):
         if isinstance(obj, (datetime.datetime, datetime.date)):
             return obj.isoformat()
@@ -79,15 +80,15 @@ class JSONCollection:
         for doc in docs:
             if self._match(doc, query):
                 matched.append(dict(doc))
-        
+
         if sort:
             for field, order in reversed(sort):
                 reverse = True if order == -1 else False
                 matched.sort(key=lambda x: (x.get(field) is not None, x.get(field)), reverse=reverse)
-                
+
         if limit:
             matched = matched[:limit]
-            
+
         class MockCursor:
             def __init__(self, data):
                 self.data = data
@@ -109,7 +110,7 @@ class JSONCollection:
                 return self.data[index]
             def __len__(self):
                 return len(self.data)
-                
+
         return MockCursor(matched)
 
     def insert_one(self, document):
@@ -119,7 +120,7 @@ class JSONCollection:
             doc['_id'] = str(uuid.uuid4())
         docs.append(doc)
         self._save(docs)
-        
+
         class InsertResult:
             def __init__(self, inserted_id):
                 self.inserted_id = inserted_id
@@ -135,7 +136,7 @@ class JSONCollection:
             docs.append(d)
             inserted_ids.append(d['_id'])
         self._save(docs)
-        
+
         class InsertManyResult:
             def __init__(self, ids):
                 self.inserted_ids = ids
@@ -157,10 +158,10 @@ class JSONCollection:
                 new_doc['_id'] = str(uuid.uuid4())
             docs.append(new_doc)
             found = True
-            
+
         if found:
             self._save(docs)
-            
+
         class UpdateResult:
             def __init__(self, matched_count, modified_count):
                 self.matched_count = matched_count
@@ -177,7 +178,7 @@ class JSONCollection:
                 modified_count += 1
         if modified_count > 0:
             self._save(docs)
-            
+
         class UpdateResult:
             def __init__(self, matched_count, modified_count):
                 self.matched_count = matched_count
@@ -217,7 +218,7 @@ class JSONCollection:
         if found_idx != -1:
             docs.pop(found_idx)
             self._save(docs)
-            
+
         class DeleteResult:
             def __init__(self, deleted_count):
                 self.deleted_count = deleted_count
@@ -230,7 +231,7 @@ class JSONCollection:
         deleted_count = initial_len - len(docs)
         if deleted_count > 0:
             self._save(docs)
-            
+
         class DeleteResult:
             def __init__(self, deleted_count):
                 self.deleted_count = deleted_count
@@ -249,7 +250,7 @@ class JSONDatabaseWrapper:
     def __init__(self, db_path):
         self.db_path = db_path
         self._collections = {}
-        
+
     def __getattr__(self, name):
         if name not in self._collections:
             self._collections[name] = JSONCollection(self.db_path, name)
@@ -266,8 +267,7 @@ def get_db():
         client = MongoClient(
             mongo_uri,
             serverSelectionTimeoutMS=5000,
-            tls=True,
-            tlsAllowInvalidCertificates=True
+            tlsCAFile=certifi.where()
         )
         client.admin.command('ping')
         print("Successfully connected to MongoDB.")
