@@ -262,7 +262,7 @@ def get_db():
     mongo_uri = os.environ.get("MONGO_URI", "mongodb://localhost:27017/")
     try:
         print(f"Connecting to MongoDB at {mongo_uri}...")
-        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=2000)
+        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
         client.admin.command('ping')
         print("Successfully connected to MongoDB.")
         return client['ecoquest']
